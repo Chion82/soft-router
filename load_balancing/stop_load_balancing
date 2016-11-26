@@ -1,0 +1,16 @@
+#!/bin/sh
+INTERFACES=('enp3s0f2' 'enp0s20u1u2')
+
+iptables -t mangle -D PREROUTING -j load_balancing
+iptables -t mangle -D OUTPUT -j load_balancing
+iptables -t mangle -F load_balancing
+iptables -t mangle -X load_balancing
+
+interface_index=0
+for interface in ${INTERFACES[@]};do
+	interface_index=$((interface_index+1))
+	ip route flush table $interface_index
+	ip rule del fwmark $interface_index table $interface_index
+	echo 1 > /proc/sys/net/ipv4/conf/$interface/rp_filter
+done
+

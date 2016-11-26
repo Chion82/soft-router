@@ -1,0 +1,74 @@
+#!/bin/sh
+INTERFACES=('enp3s0f2' 'enp0s20u1u2')
+BYPASS=('192.168.0.0/16')
+declare -A RULES
+RULES['enp3s0f2']="rule=()"
+RULES['enp0s20u1u2']="rule=('61.139.2.69','218.6.200.139','47.89.24.182')"
+
+sleep 10
+
+/usr/bin/stop_load_balancing
+
+up_interfaces=0
+valid_interfaces=()
+valid_gateways=()
+for interface in ${INTERFACES[@]}; do
+	gateway=$(ip route show table main | grep 'default via' | grep "dev $interface" | awk '{ print $3 }')
+	if [ ${#gateway} -eq 0 ]; then
+		echo "$interface has no route, skipping"
+		continue
+	fi
+
+	valid_interfaces+=($interface)
+	valid_gateways+=($gateway)
+	up_interfaces=$((up_interfaces+1))
+done
+
+iptables -t mangle -N load_balancing
+iptables -t mangle -F load_balancing
+iptables -t mangle -A PREROUTING -j load_balancing
+iptables -t mangle -A OUTPUT -j load_balancing
+
+for bypass_addr in ${BYPASS[@]};do
+	iptables -t mangle -A load_balancing -d $bypass_addr -j RETURN
+done
+
+iptables -t mangle -A load_balancing -j CONNMARK --restore-mark
+
+interface_index=0
+for interface in ${valid_interfaces[@]};do
+	interface_index=$((interface_index+1))
+	iptables -t mangle -A load_balancing -m mark --mark 0 -i $interface -j MARK --set-mark $interface_index
+done
+
+interface_index=0
+for interface in ${valid_interfaces[@]};do
+	interface_index=$((interface_index+1))
+	eval ${RULES[${interface}]}
+	for rule_addr in ${rule[@]}; do
+		iptables -t mangle -A load_balancing -d $rule_addr -j MARK --set-mark $interface_index 
+	done
+done	
+
+interface_index=0
+for interface in ${valid_interfaces[@]};do
+	gateway=${valid_gateways[$interface_index]}
+	echo "index=$interface_index; $interface; $gateway"
+	interface_index=$((interface_index+1))
+
+	if [ $interface_index -eq $up_interfaces ]; then
+		iptables -t mangle -A load_balancing -m mark --mark 0 -j MARK --set-mark $interface_index
+	else
+		iptables -t mangle -A load_balancing -m mark --mark 0 -m statistic --mode random --probability 0.$(( 100000 / $up_interfaces )) -j MARK --set-mark $interface_index	
+	fi
+
+	ip route flush table $interface_index
+	ip route add default via $gateway dev $interface table $interface_index
+	ip rule add fwmark $interface_index table $interface_index
+
+	echo 2 > /proc/sys/net/ipv4/conf/$interface/rp_filter
+
+done
+
+iptables -t mangle -A load_balancing -j CONNMARK --save-mark
+
