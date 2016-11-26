@@ -6,6 +6,10 @@ iptables -t mangle -D OUTPUT -j load_balancing
 iptables -t mangle -F load_balancing
 iptables -t mangle -X load_balancing
 
+iptables -t mangle -D FORWARD -j mssfix
+iptables -t mangle -F mssfix
+iptables -t mangle -X mssfix
+
 interface_index=0
 for interface in ${INTERFACES[@]};do
 	interface_index=$((interface_index+1))

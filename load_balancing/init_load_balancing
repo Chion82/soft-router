@@ -29,6 +29,10 @@ iptables -t mangle -F load_balancing
 iptables -t mangle -A PREROUTING -j load_balancing
 iptables -t mangle -A OUTPUT -j load_balancing
 
+iptables -t mangle -N mssfix
+iptables -t mangle -F mssfix
+iptables -t mangle -A FORWARD -j mssfix
+
 for bypass_addr in ${BYPASS[@]};do
 	iptables -t mangle -A load_balancing -d $bypass_addr -j RETURN
 done
@@ -67,6 +71,8 @@ for interface in ${valid_interfaces[@]};do
 	ip rule add fwmark $interface_index table $interface_index
 
 	echo 2 > /proc/sys/net/ipv4/conf/$interface/rp_filter
+
+	iptables -t mangle -A mssfix -p tcp --tcp-flags SYN,RST SYN -o $interface -j TCPMSS --clamp-mss-to-pmtu 
 
 done
 
