@@ -3,7 +3,7 @@ INTERFACES=('enp3s0f2' 'enp0s20u1u2')
 BYPASS=('192.168.0.0/16')
 declare -A RULES
 RULES['enp3s0f2']="rule=('edu_list,dst')"
-RULES['enp0s20u1u2']="rule=('61.139.2.69' '218.6.200.139' '47.89.24.182' '!,edu_list,dst')"
+RULES['enp0s20u1u2']="rule=('force,61.139.2.69' 'force,218.6.200.139' 'force,47.89.24.182' '0.0.0.0/0')"
 
 sleep 10
 
@@ -51,14 +51,20 @@ for interface in ${valid_interfaces[@]};do
 	eval ${RULES[${interface}]}
 	for rule_addr in ${rule[@]}; do
 		rule_addr=$(echo $rule_addr | sed 's/,/ /g')
+		if [[ $rule_addr == *"force"* ]]; then 
+			mark_filter=''
+		else
+			mark_filter='-m mark --mark 0'
+		fi
+		rule_addr=$(echo $rule_addr | sed 's/force/ /g')
 		if [[ $rule_addr == *"dst"* ]] || [[ $rule_addr == *"src"* ]]; then
 			if [[ $rule_addr == *'!'* ]]; then
-				iptables -t mangle -A load_balancing -m set ! --match-set $(echo $rule_addr | sed -e 's/!//g') -j MARK --set-mark $interface_index 
+				iptables -t mangle -A load_balancing $mark_filter -m set ! --match-set $(echo $rule_addr | sed -e 's/!//g') -j MARK --set-mark $interface_index 
 			else
-				iptables -t mangle -A load_balancing -m set --match-set $rule_addr -j MARK --set-mark $interface_index
+				iptables -t mangle -A load_balancing $mark_filter -m set --match-set $rule_addr -j MARK --set-mark $interface_index
 			fi
 		else
-			iptables -t mangle -A load_balancing -d $rule_addr -j MARK --set-mark $interface_index 
+			iptables -t mangle -A load_balancing $mark_filter -d $rule_addr -j MARK --set-mark $interface_index 
 		fi
 	done
 done	
