@@ -2,8 +2,8 @@
 INTERFACES=('enp3s0f2' 'enp0s20u1u2')
 BYPASS=('192.168.0.0/16')
 declare -A RULES
-RULES['enp3s0f2']="rule=()"
-RULES['enp0s20u1u2']="rule=('61.139.2.69','218.6.200.139','47.89.24.182')"
+RULES['enp3s0f2']="rule=('edu_list,dst')"
+RULES['enp0s20u1u2']="rule=('61.139.2.69' '218.6.200.139' '47.89.24.182' '!,edu_list,dst')"
 
 sleep 10
 
@@ -50,14 +50,22 @@ for interface in ${valid_interfaces[@]};do
 	interface_index=$((interface_index+1))
 	eval ${RULES[${interface}]}
 	for rule_addr in ${rule[@]}; do
-		iptables -t mangle -A load_balancing -d $rule_addr -j MARK --set-mark $interface_index 
+		rule_addr=$(echo $rule_addr | sed 's/,/ /g')
+		if [[ $rule_addr == *"dst"* ]] || [[ $rule_addr == *"src"* ]]; then
+			if [[ $rule_addr == *'!'* ]]; then
+				iptables -t mangle -A load_balancing -m set ! --match-set $(echo $rule_addr | sed -e 's/!//g') -j MARK --set-mark $interface_index 
+			else
+				iptables -t mangle -A load_balancing -m set --match-set $rule_addr -j MARK --set-mark $interface_index
+			fi
+		else
+			iptables -t mangle -A load_balancing -d $rule_addr -j MARK --set-mark $interface_index 
+		fi
 	done
 done	
 
 interface_index=0
 for interface in ${valid_interfaces[@]};do
 	gateway=${valid_gateways[$interface_index]}
-	echo "index=$interface_index; $interface; $gateway"
 	interface_index=$((interface_index+1))
 
 	if [ $interface_index -eq $up_interfaces ]; then
