@@ -5,7 +5,7 @@ declare -A RULES
 RULES['enp3s0f2']="rule=('edu_list,dst')"
 RULES['enp0s20u1u2']="rule=('force,61.139.2.69' 'force,218.6.200.139' 'force,47.89.24.182' '0.0.0.0/0')"
 
-sleep 10
+sleep 30
 
 /usr/bin/stop_load_balancing
 
