@@ -52,3 +52,6 @@ iptables -t nat -I POSTROUTING -o $VPN_INTERFACE -j MASQUERADE
 #Set rp_filter
 echo 2 > /proc/sys/net/ipv4/conf/$VPN_INTERFACE/rp_filter
 
+#Restart ChinaDNS
+/usr/bin/systemctl restart chinadns.service
+
