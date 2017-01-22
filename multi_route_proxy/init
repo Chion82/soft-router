@@ -1,0 +1,87 @@
+#!/bin/sh
+
+DIR=$(dirname $(readlink -f $0))
+if [ ${#DIR} -gt 0 ]; then
+  cd $DIR
+fi
+
+source ./config
+
+./stop > /dev/null 2>&1
+
+$IPSET create tinc_proxy_bypass hash:net
+$IPSET add tinc_proxy_bypass 127.0.0.1
+for vpn_gateway_config in ${VPN_GATEWAYS[@]}; do
+  gateway_id=$(echo $vpn_gateway_config | cut -d ',' -f 1)
+  gateway_real_ip=$(echo $vpn_gateway_config | cut -d ',' -f 2)
+  gateway_internal_ip=$(echo $vpn_gateway_config | cut -d ',' -f 3)
+  vpn_network=$(echo $vpn_gateway_config | cut -d ',' -f 4)
+  vpn_interface=$(echo $vpn_gateway_config | cut -d ',' -f 5)
+
+  $IPSET add tinc_proxy_bypass $gateway_real_ip
+  $IPSET add tinc_proxy_bypass $gateway_internal_ip
+  $IPSET add tinc_proxy_bypass $vpn_network
+
+  $IPROUTE2 route flush table $gateway_id
+  $IPROUTE2 route add default via $gateway_internal_ip dev $vpn_interface table $gateway_id
+  $IPROUTE2 rule add fwmark $gateway_id table $gateway_id
+
+  $IPTABLES -t nat -I POSTROUTING -o $vpn_interface -j MASQUERADE
+
+  if [[ $CHANGE_RPFILTER == 'yes' ]]; then
+    echo 2 > /proc/sys/net/ipv4/conf/$vpn_interface/rp_filter
+  fi
+done
+
+$IPTABLES -t mangle -N tinc_proxy
+$IPTABLES -t mangle -A tinc_proxy -m set --match-set tinc_proxy_bypass dst -j RETURN
+
+$IPTABLES -t mangle -A tinc_proxy -j CONNMARK --restore-mark
+
+for rule_config in ${RULES[@]}; do
+  rule_type=$(echo $rule_config | cut -d ',' -f 1)
+  direction=$(echo $rule_config | cut -d ',' -f 2)
+  rule_detail=$(echo $rule_config | cut -d ',' -f 3)
+  rule_mark=$(echo $rule_config | cut -d ',' -f 4)
+
+  command_string="$IPTABLES -t mangle -A tinc_proxy -m mark --mark 0"
+
+  if [[ $rule_type == "IP" ]]; then
+    if [[ $direction == "SRC" ]]; then
+      command_string="$command_string -s $rule_detail"
+    else
+      command_string="$command_string -d $rule_detail"
+    fi
+  elif [[ $rule_type == "SET" ]]; then
+    command_string="$command_string -m set"
+    if [[ $rule_detail == !* ]]; then
+      command_string="$command_string ! --match-set $(echo $rule_detail | sed -e 's/^!//')"
+    else
+      command_string="$command_string --match-set $rule_detail"
+    fi
+    if [[ $direction == "SRC" ]]; then
+      command_string="$command_string src"
+    else
+      command_string="$command_string dst"
+    fi
+  else
+    echo 'Invalid rule type.' >&2
+    continue
+  fi
+
+  if [[ $rule_mark == "RETURN" ]]; then
+    command_string="$command_string -j RETURN"
+  else
+    command_string="$command_string -j MARK --set-mark $rule_mark"
+  fi
+
+  $command_string
+
+done
+
+$IPTABLES -t mangle -A tinc_proxy -j CONNMARK --save-mark
+
+$IPTABLES -t mangle -I PREROUTING -j tinc_proxy
+$IPTABLES -t mangle -I OUTPUT -j tinc_proxy
+
+./post_init

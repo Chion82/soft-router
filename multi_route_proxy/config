@@ -1,0 +1,21 @@
+#!/bin/sh
+
+# VPN_GATEWAYS = ( 'ID,REAL_IP,VPN_IP,VPN_NETWORK,VPN_INTERFACE' )
+# ID is used as both iptables mark and route table id
+VPN_GATEWAYS=( '200,XX.XX.XX.XX,192.168.100.1,192.168.100.0/24,chionvpn' '300,XX.XX.XX.XX,192.168.110.1,192.168.110.0/24,chionvpnjp' )
+
+RULES=(\
+ 'IP,DST,10.0.0.0/8,RETURN' \
+ 'IP,DST,172.16.0.0/12,RETURN' \
+ 'IP,DST,192.168.0.0/16,RETURN' \
+ 'SET,DST,spotify_prefixes,200' \
+ 'SET,DST,jp_prefixes,300' \
+ 'SET,DST,hk_prefixes,200' \
+ 'SET,DST,!cn_prefixes,300' \
+)
+
+IPTABLES='/usr/bin/iptables'
+IPSET='/usr/bin/ipset'
+IPROUTE2='/usr/bin/ip'
+
+CHANGE_RPFILTER=yes

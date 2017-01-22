@@ -1,0 +1,4 @@
+#!/bin/sh
+
+#Restart ChinaDNS
+/usr/bin/systemctl restart chinadns.service

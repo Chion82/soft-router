@@ -1,0 +1,27 @@
+#!/bin/sh
+
+DIR=$(dirname $(readlink -f $0))
+if [ ${#DIR} -gt 0 ]; then
+  cd $DIR
+fi
+
+source ./config
+
+if [[ $($IPSET list cn_prefixes 2>/dev/null | wc -l) -eq 0 ]]; then
+  /usr/bin/init_ipset
+fi
+
+for vpn_gateway_config in ${VPN_GATEWAYS[@]}; do
+  vpn_interface=$(echo $vpn_gateway_config | cut -d ',' -f 5)
+
+  while [ True ]; do
+    interface_count=$($IPROUTE2 addr | grep ${vpn_interface}: | wc -l)
+    if [[ $interface_count -gt 0 ]]; then
+      break
+    fi
+    sleep 3
+  done
+
+done
+
+./init

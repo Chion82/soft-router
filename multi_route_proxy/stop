@@ -1,0 +1,34 @@
+#!/bin/sh
+
+DIR=$(dirname $(readlink -f $0))
+if [ ${#DIR} -gt 0 ]; then
+  cd $DIR
+fi
+
+source ./config
+
+./pre_stop
+
+for vpn_gateway_config in ${VPN_GATEWAYS[@]}; do
+  vpn_interface=$(echo $vpn_gateway_config | cut -d ',' -f 5)
+
+  if [[ $CHANGE_RPFILTER == 'yes' ]]; then
+    echo 1 > /proc/sys/net/ipv4/conf/$vpn_interface/rp_filter
+  fi
+
+  $IPTABLES -t nat -D POSTROUTING -o $vpn_interface -j MASQUERADE
+done
+
+$IPTABLES -t mangle -D PREROUTING -j tinc_proxy
+$IPTABLES -t mangle -D OUTPUT -j tinc_proxy
+
+$IPTABLES -t mangle -F tinc_proxy
+$IPTABLES -t mangle -X tinc_proxy
+
+for vpn_gateway_config in ${VPN_GATEWAYS[@]}; do
+  gateway_id=$(echo $vpn_gateway_config | cut -d ',' -f 1)
+  $IPROUTE2 rule del fwmark $gateway_id table $gateway_id
+  $IPROUTE2 route flush table $gateway_id
+done
+
+$IPSET destroy tinc_proxy_bypass
