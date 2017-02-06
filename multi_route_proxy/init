@@ -26,7 +26,7 @@ for vpn_gateway_config in ${VPN_GATEWAYS[@]}; do
   $IPROUTE2 route add default via $gateway_internal_ip dev $vpn_interface table $gateway_id
   $IPROUTE2 rule add fwmark $gateway_id table $gateway_id
 
-  $IPTABLES -t nat -I POSTROUTING -o $vpn_interface -j MASQUERADE
+  $IPTABLES -t nat -A POSTROUTING -o $vpn_interface -j MASQUERADE
 
   if [[ $CHANGE_RPFILTER == 'yes' ]]; then
     echo 2 > /proc/sys/net/ipv4/conf/$vpn_interface/rp_filter
