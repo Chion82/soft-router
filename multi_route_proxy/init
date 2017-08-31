@@ -10,7 +10,10 @@ source ./config
 ./stop > /dev/null 2>&1
 
 $IPSET create tinc_proxy_bypass hash:net
-$IPSET add tinc_proxy_bypass 127.0.0.1
+$IPSET add tinc_proxy_bypass 127.0.0.0/24
+$IPSET add tinc_proxy_bypass 10.0.0.0/8
+$IPSET add tinc_proxy_bypass 172.16.0.0/12
+$IPSET add tinc_proxy_bypass 192.168.0.0/16
 for vpn_gateway_config in ${VPN_GATEWAYS[@]}; do
   gateway_id=$(echo $vpn_gateway_config | cut -d ',' -f 1)
   gateway_real_ip=$(echo $vpn_gateway_config | cut -d ',' -f 2)
